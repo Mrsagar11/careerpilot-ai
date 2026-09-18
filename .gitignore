@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.db
+*.sqlite3
+
+# Environment & Secrets
+.env
+.env.local
+*.pem
+
+# Node.js & React
+node_modules/
+dist/
+build/
+.DS_Store
+
+# IDEs & System
+.vscode/
+.idea/
+*.swp
+*.log
