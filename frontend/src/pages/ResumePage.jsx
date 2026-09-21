@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { uploadResumeApi, getLatestResumeApi } from '../services/api';
-import { FileText, Upload, Sparkles, AlertTriangle, CheckCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import { FileText, Upload, Sparkles, AlertTriangle, CheckCircle, ArrowRight, ShieldCheck, Edit3 } from 'lucide-react';
 
 export default function ResumePage() {
   const [selectedFile, setSelectedFile] = useState(null);
+  const [resumeText, setResumeText] = useState('');
+  const [activeTab, setActiveTab] = useState('upload'); // 'upload' or 'text'
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState('');
@@ -35,10 +37,6 @@ export default function ResumePage() {
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.type !== 'application/pdf') {
-        setError('Please select a valid PDF file.');
-        return;
-      }
       setSelectedFile(file);
       setError('');
     }
@@ -46,18 +44,33 @@ export default function ResumePage() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (activeTab === 'upload' && !selectedFile) {
+      setError('Please choose a PDF resume file.');
+      return;
+    }
+    if (activeTab === 'text' && !resumeText.trim()) {
+      setError('Please paste your resume content.');
+      return;
+    }
 
     setAnalyzing(true);
     setError('');
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
+    
     try {
+      let formData = new FormData();
+      if (activeTab === 'upload' && selectedFile) {
+        formData.append('file', selectedFile);
+      } else {
+        // Create a blob file from the pasted resume text
+        const textBlob = new Blob([resumeText], { type: 'text/plain' });
+        const textFile = new File([textBlob], 'Pasted_Resume.txt', { type: 'text/plain' });
+        formData.append('file', textFile);
+      }
+
       const res = await uploadResumeApi(formData);
       setAnalysis(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to parse resume PDF.');
+      setError(err.response?.data?.detail || 'Failed to parse resume.');
     } finally {
       setAnalyzing(false);
     }
@@ -71,31 +84,68 @@ export default function ResumePage() {
             <FileText className="w-6 h-6 text-brand-400" />
             <span>AI Resume Analyzer</span>
           </h1>
-          <p className="text-xs text-slate-400">Upload your PDF resume for instant ATS section parsing, impact scoring, and keyword extraction.</p>
+          <p className="text-xs text-slate-400">Upload your PDF or paste your resume text for real-time ATS section parsing, impact scoring, and exact skill extraction.</p>
         </div>
       </div>
 
-      {/* Upload Box */}
-      <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-4">
-        <form onSubmit={handleUpload} className="space-y-4 max-w-xl mx-auto">
-          <div className="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-8 transition cursor-pointer bg-slate-950/50">
-            <input
-              type="file"
-              accept=".pdf"
-              onChange={handleFileChange}
-              className="hidden"
-              id="resume-file-input"
-            />
-            <label htmlFor="resume-file-input" className="cursor-pointer space-y-3 block">
-              <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center mx-auto">
-                <Upload className="w-6 h-6" />
-              </div>
-              <div className="text-sm font-semibold text-white">
-                {selectedFile ? selectedFile.name : 'Click to upload or drag & drop PDF resume'}
-              </div>
-              <p className="text-xs text-slate-500">Supports standard single or multi-page PDF resumes up to 10MB</p>
-            </label>
-          </div>
+      {/* Input Box with Tabs */}
+      <div className="p-6 md:p-8 rounded-3xl bg-slate-900 border border-slate-800 space-y-6">
+        <div className="flex border-b border-slate-800 gap-3">
+          <button
+            onClick={() => { setActiveTab('upload'); setError(''); }}
+            className={`pb-3 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+              activeTab === 'upload'
+                ? 'border-brand-500 text-brand-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload PDF File</span>
+          </button>
+          <button
+            onClick={() => { setActiveTab('text'); setError(''); }}
+            className={`pb-3 text-xs font-bold transition flex items-center gap-2 border-b-2 ${
+              activeTab === 'text'
+                ? 'border-brand-500 text-brand-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>Paste Resume Text Directly</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleUpload} className="space-y-4 max-w-2xl mx-auto">
+          {activeTab === 'upload' ? (
+            <div className="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-8 transition cursor-pointer bg-slate-950/50 text-center">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                onChange={handleFileChange}
+                className="hidden"
+                id="resume-file-input"
+              />
+              <label htmlFor="resume-file-input" className="cursor-pointer space-y-3 block">
+                <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center mx-auto">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div className="text-sm font-semibold text-white">
+                  {selectedFile ? selectedFile.name : 'Click to select or drag & drop PDF resume'}
+                </div>
+                <p className="text-xs text-slate-500">Supports PDF, DOCX, and TXT resumes</p>
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <textarea
+                rows={7}
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+                placeholder="Paste your full resume text here (Education, Skills, Experience, Projects)..."
+                className="w-full p-4 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500 leading-relaxed font-sans"
+              />
+            </div>
+          )}
 
           {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
@@ -105,13 +155,13 @@ export default function ResumePage() {
 
           <button
             type="submit"
-            disabled={!selectedFile || analyzing}
+            disabled={analyzing}
             className="w-full py-3.5 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold text-sm transition shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2"
           >
             {analyzing ? (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Parsing PDF & Evaluating ATS Rules...</span>
+                <span>Parsing Resume & Calculating ATS Score...</span>
               </div>
             ) : (
               <>
@@ -131,7 +181,7 @@ export default function ResumePage() {
             <div className="p-6 rounded-3xl bg-gradient-to-br from-brand-900/40 to-slate-900 border border-brand-500/30 text-center space-y-2">
               <span className="text-xs font-semibold text-brand-300 uppercase tracking-wider">Overall ATS Score</span>
               <div className="text-4xl font-extrabold text-white">{analysis.scores?.overall}<span className="text-sm text-slate-400">/100</span></div>
-              <p className="text-[11px] text-slate-400">Calculated across formatting, skills & action verb density</p>
+              <p className="text-[11px] text-slate-400">Based on formatting, skills & action verb density</p>
             </div>
 
             <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-2">
@@ -156,14 +206,22 @@ export default function ResumePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Extracted Skills */}
             <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
-              <h3 className="font-bold text-white text-base">Extracted Technical Skills ({analysis.extracted_skills?.length || 0})</h3>
-              <div className="flex flex-wrap gap-2">
-                {(analysis.extracted_skills || []).map((skill) => (
-                  <span key={skill} className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-brand-300 text-xs font-semibold">
-                    {skill}
-                  </span>
-                ))}
-              </div>
+              <h3 className="font-bold text-white text-base">
+                Extracted Technical Skills ({analysis.extracted_skills?.length || 0})
+              </h3>
+              {analysis.extracted_skills?.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {analysis.extracted_skills.map((skill) => (
+                    <span key={skill} className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-brand-300 text-xs font-semibold">
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-800/50 text-slate-400 text-xs italic">
+                  No standard technical skills detected in the uploaded text. Try uploading a text/PDF containing skills like Python, Java, React, SQL, Git, etc.
+                </div>
+              )}
             </div>
 
             {/* Detected Sections */}

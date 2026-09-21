@@ -36,7 +36,188 @@ api.interceptors.response.use(
 );
 
 // -------------------------------------------------------------
-// CLIENT-SIDE LOCALSTORAGE MOCK ENGINE (FALLBACK WHEN BACKEND OFFLINE)
+// COMPREHENSIVE SKILLS TAXONOMY & ATS RULES
+// -------------------------------------------------------------
+const SKILL_TAXONOMY = [
+  // Programming Languages
+  "python", "java", "c++", "c#", "javascript", "typescript", "go", "golang", "rust", "php", "ruby", "kotlin", "swift", "sql", "r", "html", "css", "dart", "scala", "bash", "shell",
+  // Frameworks & Libraries
+  "react", "react.js", "next.js", "vue", "vue.js", "angular", "node.js", "node", "express", "express.js", "fastapi", "flask", "django", "spring boot", "spring", ".net", "dotnet", "tailwind", "tailwind css", "bootstrap", "pandas", "numpy", "scikit-learn", "tensorflow", "pytorch", "keras", "redux", "zustand",
+  // Databases
+  "postgresql", "postgres", "mysql", "mongodb", "sqlite", "redis", "dynamodb", "oracle", "cassandra", "firebase", "supabase",
+  // DevOps & Cloud
+  "docker", "kubernetes", "aws", "azure", "gcp", "git", "github", "gitlab", "ci/cd", "jenkins", "linux", "jira", "postman", "nginx", "rest api", "graphql", "microservices", "terraform", "kafka"
+];
+
+const ACTION_VERBS = [
+  "built", "developed", "created", "designed", "implemented", "engineered", "optimized", "spearheaded", "architected", "automated", "reduced", "increased", "boosted", "deployed", "scaled", "lead", "integrated", "transformed", "managed", "refactored"
+];
+
+// Helper to extract text from PDF File in Browser
+const extractTextFromPdfBlob = (file) => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const buffer = reader.result;
+        const bytes = new Uint8Array(buffer);
+        const decoder = new TextDecoder('utf-8', { fatal: false });
+        const rawString = decoder.decode(bytes);
+
+        // Extract text inside PDF parentheses (text operators)
+        const textTokens = [];
+        const matches = rawString.match(/\(([^()]{2,})\)/g);
+        if (matches) {
+          matches.forEach(m => {
+            const clean = m.slice(1, -1).trim();
+            if (clean.length > 1) textTokens.push(clean);
+          });
+        }
+
+        // Also clean raw string streams
+        const cleanStream = rawString
+          .replace(/stream[\s\S]*?endstream/g, (s) => {
+            const inner = s.match(/\(([^()]+)\)/g);
+            return inner ? inner.map(x => x.slice(1, -1)).join(' ') : ' ';
+          })
+          .replace(/[^a-zA-Z0-9+#.\s\-_/@%]/g, ' ');
+
+        const finalExtracted = (textTokens.join(' ') + ' ' + cleanStream).trim();
+        resolve(finalExtracted.length > 30 ? finalExtracted : rawString);
+      } catch (err) {
+        console.warn('PDF stream decoding fallback:', err);
+        resolve('');
+      }
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+// Client-side Resume Parser Engine
+const parseResumeClientSide = (text, fileName) => {
+  const textLower = text.toLowerCase();
+  
+  // 1. Extract Real Skills
+  const foundSkillsSet = new Set();
+  SKILL_TAXONOMY.forEach(skill => {
+    // Exact word boundary regex
+    let pattern;
+    if (skill === 'c++') {
+      pattern = /(?:^|\s|\b)c\+\+(?:$|\s|\b|[,;])/i;
+    } else if (skill === 'c#') {
+      pattern = /(?:^|\s|\b)c#(?:$|\s|\b|[,;])/i;
+    } else if (skill === '.net') {
+      pattern = /(?:^|\s)\.net(?:$|\s|[,;])/i;
+    } else {
+      pattern = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    }
+
+    if (pattern.test(textLower)) {
+      let displayName = skill.length > 3 ? skill.charAt(0).toUpperCase() + skill.slice(1) : skill.toUpperCase();
+      if (skill === 'react.js' || skill === 'react') displayName = 'React';
+      if (skill === 'node.js' || skill === 'node') displayName = 'Node.js';
+      if (skill === 'express.js' || skill === 'express') displayName = 'Express';
+      if (skill === 'fastapi') displayName = 'FastAPI';
+      if (skill === 'postgresql' || skill === 'postgres') displayName = 'PostgreSQL';
+      if (skill === 'mongodb') displayName = 'MongoDB';
+      if (skill === 'javascript') displayName = 'JavaScript';
+      if (skill === 'typescript') displayName = 'TypeScript';
+      if (skill === 'tailwind' || skill === 'tailwind css') displayName = 'Tailwind CSS';
+      if (skill === 'rest api') displayName = 'REST API';
+      foundSkillsSet.add(displayName);
+    }
+  });
+
+  const extractedSkills = Array.from(foundSkillsSet).sort();
+
+  // 2. Detect Resume Sections
+  const detectedSections = [];
+  const sectionKeywords = {
+    "Education": ["education", "academic", "degree", "b.tech", "bachelor", "university", "college", "gpa", "cgpa"],
+    "Experience": ["experience", "employment", "work history", "internship", "developer", "engineer"],
+    "Projects": ["projects", "personal projects", "key projects", "academic projects", "github.com"],
+    "Skills": ["skills", "technical skills", "technologies", "competencies", "programming", "tools"],
+    "Certifications": ["certifications", "certificates", "courses", "achievements", "licenses"]
+  };
+
+  Object.entries(sectionKeywords).forEach(([secName, keywords]) => {
+    if (keywords.some(kw => textLower.includes(kw))) {
+      detectedSections.push(secName);
+    }
+  });
+
+  // 3. Action Verbs
+  const foundVerbs = ACTION_VERBS.filter(v => {
+    const reg = new RegExp(`\\b${v}\\b`, 'i');
+    return reg.test(textLower);
+  });
+
+  // 4. Quantified Metrics Check (% / numbers / metrics)
+  const metricsMatches = textLower.match(/\b\d+%\b|\$\d+|\b\d+\s*(?:users|clients|requests|ms|seconds|hours|percent|increase|reduction|growth|scaled|improved)\b/g) || [];
+
+  // 5. Compute Dynamic Scores based on Actual Content
+  const formatScore = Math.min(25.0, Math.round((Math.max(1, detectedSections.length) / 4.0) * 25.0 * 10) / 10);
+  const skillsScore = Math.min(35.0, Math.round((Math.max(1, extractedSkills.length) / 10.0) * 35.0 * 10) / 10);
+  const impactScore = Math.min(40.0, Math.round(((Math.min(5, foundVerbs.length) / 5.0) * 20.0 + (Math.min(2, metricsMatches.length) / 2.0) * 20.0) * 10) / 10);
+  
+  let overall = Math.round((formatScore + skillsScore + impactScore) * 10) / 10;
+  overall = Math.min(100.0, Math.max(25.0, overall));
+
+  // 6. Strengths and Improvements
+  const strengths = [];
+  const improvements = [];
+
+  if (extractedSkills.length >= 6) {
+    strengths.push(`Identified ${extractedSkills.length} relevant technical skills in your resume.`);
+  } else if (extractedSkills.length > 0) {
+    improvements.push(`Only ${extractedSkills.length} technical skills detected. Consider adding more framework and database keywords.`);
+  } else {
+    improvements.push('No technical skills detected. Ensure your technical skills section uses standard keywords.');
+  }
+
+  if (detectedSections.includes('Projects') || detectedSections.includes('Experience')) {
+    strengths.push('Detected clear Project & Experience sections for ATS parsing.');
+  } else {
+    improvements.push('Add clear "Projects" or "Experience" section headers.');
+  }
+
+  if (foundVerbs.length >= 3) {
+    strengths.push(`Good action verb usage (${foundVerbs.slice(0, 3).join(', ')}).`);
+  } else {
+    improvements.push('Start bullet points with strong action verbs (Developed, Architected, Engineered, Optimized).');
+  }
+
+  if (metricsMatches.length >= 1) {
+    strengths.push('Contains quantifiable impact metrics and measurable results.');
+  } else {
+    improvements.push('Quantify project bullet points with metrics (e.g., "Reduced response latency by 30%").');
+  }
+
+  const criticalCheck = ["Git", "SQL", "Docker", "REST API"];
+  const missingCritical = criticalCheck.filter(k => !foundSkillsSet.has(k));
+
+  return {
+    filename: fileName || 'Resume.pdf',
+    raw_text_length: text.length,
+    raw_text: text,
+    extracted_skills: extractedSkills,
+    detected_sections: detectedSections,
+    scores: {
+      overall,
+      format_score: formatScore,
+      skills_score: skillsScore,
+      impact_score: impactScore
+    },
+    strengths,
+    improvements,
+    action_verbs_found: foundVerbs,
+    missing_critical_keywords: missingCritical
+  };
+};
+
+// -------------------------------------------------------------
+// LOCALSTORAGE HELPER FUNCTIONS
 // -------------------------------------------------------------
 const getLocalData = (key, defaultVal) => {
   try {
@@ -55,43 +236,14 @@ const setLocalData = (key, val) => {
   }
 };
 
-// Default initial state
-if (!getLocalData('users', null)) {
-  setLocalData('users', [
-    { email: 'demo.student@careerpilot.ai', password: 'demopassword123', full_name: 'Demo Student', id: 1 }
-  ]);
-}
-if (!getLocalData('profile', null)) {
-  setLocalData('profile', {
-    id: 1,
-    degree: 'B.Tech',
-    branch: 'Computer Science & Engineering',
-    graduation_year: 2026,
-    target_role: 'Software Development Engineer',
-    skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git', 'FastAPI'],
-    experience_level: 'Entry Level / Graduate',
-    location_preference: 'Remote / Flexible',
-    bio: 'Aspiring software developer passionate about building scalable web platforms.'
-  });
-}
-if (!getLocalData('applications', null)) {
-  setLocalData('applications', [
-    { id: 1, company: 'Google', role: 'Software Engineer', status: 'Interview', applied_date: '2026-09-10', interview_date: '2026-10-05', job_url: 'https://careers.google.com', notes: 'Round 1 DSA scheduled' },
-    { id: 2, company: 'Microsoft', role: 'Frontend Engineer', status: 'Assessment', applied_date: '2026-09-12', job_url: 'https://careers.microsoft.com', notes: 'Completed Codility test' },
-    { id: 3, company: 'Amazon', role: 'SDE-1', status: 'Applied', applied_date: '2026-09-15', job_url: 'https://amazon.jobs', notes: 'Referred by college alumni' }
-  ]);
-}
-
 // -------------------------------------------------------------
-// WRAPPERS WITH SEAMLESS OFFLINE/DEMO FALLBACK
+// API METHODS (TRY REAL BACKEND -> DYNAMIC CLIENT-SIDE FALLBACK)
 // -------------------------------------------------------------
 
 export const registerApi = async (data) => {
   try {
     return await api.post('/auth/register', data);
   } catch (err) {
-    // Offline / Standalone Netlify Fallback
-    console.info('Backend unreachable, using client-side registration fallback.');
     const users = getLocalData('users', []);
     const newUser = {
       id: Date.now(),
@@ -110,8 +262,6 @@ export const loginApi = async (data) => {
   try {
     return await api.post('/auth/login', data);
   } catch (err) {
-    // Offline / Standalone Netlify Fallback
-    console.info('Backend unreachable, using client-side login fallback.');
     const users = getLocalData('users', []);
     const found = users.find(u => u.email === data.email) || {
       id: 1,
@@ -137,7 +287,18 @@ export const getProfileApi = async () => {
   try {
     return await api.get('/profile/me');
   } catch (err) {
-    return { data: getLocalData('profile', {}) };
+    const profile = getLocalData('profile', {
+      id: 1,
+      degree: 'B.Tech',
+      branch: 'Computer Science & Engineering',
+      graduation_year: 2026,
+      target_role: 'Software Development Engineer',
+      skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git'],
+      experience_level: 'Entry Level / Graduate',
+      location_preference: 'Remote / Flexible',
+      bio: 'Aspiring software developer passionate about building modern web applications.'
+    });
+    return { data: profile };
   }
 };
 
@@ -156,54 +317,55 @@ export const uploadResumeApi = async (formData) => {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   } catch (err) {
-    console.info('Backend unreachable, generating client-side resume analysis.');
+    console.info('Backend unreachable, parsing uploaded PDF dynamically in browser.');
     const file = formData.get('file');
-    const mockAnalysis = {
-      filename: file?.name || 'Resume.pdf',
-      raw_text_length: 1250,
-      extracted_skills: ['Python', 'React', 'JavaScript', 'SQL', 'Git', 'FastAPI', 'HTML', 'CSS', 'Tailwind', 'PostgreSQL'],
-      detected_sections: ['Education', 'Skills', 'Projects', 'Experience', 'Certifications'],
-      scores: {
-        overall: 84.5,
-        format_score: 25.0,
-        skills_score: 32.0,
-        impact_score: 27.5
-      },
-      strengths: [
-        'Strong technical skill set detected (10 relevant skills identified).',
-        'Clear project & experience sections present for ATS parsing.',
-        'Good usage of strong action verbs (Developed, Optimized, Engineered).'
-      ],
-      improvements: [
-        'Add more quantifiable impact metrics (e.g. "Reduced query latency by 35%").',
-        'Add certifications or cloud deployment keywords like Docker or AWS.'
-      ],
-      action_verbs_found: ['Built', 'Developed', 'Engineered', 'Optimized', 'Deployed'],
-      missing_critical_keywords: ['Docker', 'CI/CD']
-    };
-    setLocalData('latest_resume', mockAnalysis);
-    return { data: mockAnalysis };
+    const rawText = file ? await extractTextFromPdfBlob(file) : '';
+    const analysis = parseResumeContentClientSide(rawText || (file ? file.name : ''), file?.name || 'Resume.pdf');
+    
+    // Save to local storage for use across the entire application
+    setLocalData('latest_resume', {
+      id: Date.now(),
+      filename: analysis.filename,
+      raw_text: analysis.raw_text,
+      score: analysis.scores.overall,
+      parsed_data: analysis
+    });
+
+    // Also update user profile skills with extracted skills if available
+    if (analysis.extracted_skills.length > 0) {
+      const currentProfile = getLocalData('profile', {});
+      const mergedSkills = Array.from(new Set([...(currentProfile.skills || []), ...analysis.extracted_skills]));
+      currentProfile.skills = mergedSkills;
+      setLocalData('profile', currentProfile);
+    }
+
+    return { data: analysis };
   }
 };
+
+function parseResumeContentClientSide(rawText, fileName) {
+  return parseResumeClientSide(rawText, fileName);
+}
 
 export const getLatestResumeApi = async () => {
   try {
     return await api.get('/resume/latest');
   } catch (err) {
-    const resume = getLocalData('latest_resume', {
-      filename: 'Sample_Resume.pdf',
-      parsed_data: {
-        raw_text: 'Jane Doe\nB.Tech CSE 2026\nSkills: Python, JavaScript, React, SQL, Git, FastAPI',
-        extracted_skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git', 'FastAPI'],
-        detected_sections: ['Education', 'Skills', 'Projects', 'Experience'],
-        scores: { overall: 84.5, format_score: 25.0, skills_score: 32.0, impact_score: 27.5 },
-        strengths: ['Strong technical skill set detected.', 'Clear ATS section headers.'],
-        improvements: ['Quantify project metrics with percentage improvements.'],
-        action_verbs_found: ['Developed', 'Built', 'Optimized'],
-        missing_critical_keywords: ['Docker']
+    const resume = getLocalData('latest_resume', null);
+    if (resume) {
+      return { data: resume };
+    }
+    // Return initial default if none uploaded yet
+    const initial = parseResumeClientSide("Education B.Tech CSE 2026 Skills Python JavaScript React SQL Git Projects Built full-stack web application with React and SQL", "Sample_Resume.pdf");
+    return {
+      data: {
+        id: 1,
+        filename: initial.filename,
+        raw_text: initial.raw_text,
+        score: initial.scores.overall,
+        parsed_data: initial
       }
-    });
-    return { data: resume };
+    };
   }
 };
 
@@ -211,7 +373,8 @@ export const getResumeHistoryApi = async () => {
   try {
     return await api.get('/resume/history');
   } catch (err) {
-    return { data: [getLocalData('latest_resume', {})] };
+    const latest = getLocalData('latest_resume', null);
+    return { data: latest ? [latest] : [] };
   }
 };
 
@@ -219,27 +382,43 @@ export const analyzeJobApi = async (data) => {
   try {
     return await api.post('/jobs/analyze', data);
   } catch (err) {
-    const jobs = getLocalData('jobs', []);
+    const textLower = (data.raw_text || '').toLowerCase();
+    
+    // Dynamically extract skills from JD
+    const foundSkills = new Set();
+    SKILL_TAXONOMY.forEach(skill => {
+      const reg = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (reg.test(textLower)) {
+        foundSkills.add(skill.length > 3 ? skill.charAt(0).toUpperCase() + skill.slice(1) : skill.toUpperCase());
+      }
+    });
+
+    const lines = (data.raw_text || '').split('\n').map(l => l.trim()).filter(l => l.length > 15);
+    const responsibilities = lines.filter(l => /develop|build|design|collaborate|manage|maintain|work/i.test(l)).slice(0, 4);
+    const qualifications = lines.filter(l => /degree|experience|proficient|knowledge|ability|skills|b\.tech/i.test(l)).slice(0, 4);
+
     const analyzed = {
       id: Date.now(),
-      title: data.title,
-      company: data.company,
-      location: data.location,
+      title: data.title || 'Software Engineer',
+      company: data.company || 'Tech Corp',
+      location: data.location || 'Remote',
       raw_text: data.raw_text,
-      extracted_skills: ['React', 'JavaScript', 'Python', 'PostgreSQL', 'Git', 'Docker', 'REST API'],
-      responsibilities: [
-        'Develop responsive web interfaces with React and Tailwind CSS.',
-        'Collaborate with backend teams to integrate RESTful API services.',
-        'Participate in agile sprints and code reviews.'
+      extracted_skills: Array.from(foundSkills).length > 0 ? Array.from(foundSkills).sort() : ['React', 'JavaScript', 'Python', 'SQL', 'Git'],
+      responsibilities: responsibilities.length > 0 ? responsibilities : [
+        'Design and develop high-performance software modules.',
+        'Collaborate with cross-functional teams to deliver clean code.',
+        'Write automated unit and integration tests.'
       ],
-      qualifications: [
-        'B.Tech in Computer Science or related field.',
-        'Hands-on experience with modern frontend frameworks.',
-        'Strong problem-solving and communication skills.'
+      qualifications: qualifications.length > 0 ? qualifications : [
+        'Degree in Computer Science, Engineering, or related discipline.',
+        'Hands-on experience with modern software development frameworks.',
+        'Strong problem-solving and analytical thinking.'
       ],
-      keywords: ['React', 'JavaScript', 'Python', 'PostgreSQL', 'Docker', 'Git']
+      keywords: Array.from(foundSkills).concat(['Teamwork', 'Agile', 'Problem Solving'])
     };
-    jobs.push(analyzed);
+
+    const jobs = getLocalData('jobs', []);
+    jobs.unshift(analyzed);
     setLocalData('jobs', jobs);
     return { data: analyzed };
   }
@@ -257,17 +436,69 @@ export const matchResumeJobApi = async (data) => {
   try {
     return await api.post('/matcher/match', data);
   } catch (err) {
+    // 1. Get Resume Skills
+    let resumeSkills = [];
+    let resumeText = '';
+    const latestResume = getLocalData('latest_resume', null);
+    if (latestResume && latestResume.parsed_data) {
+      resumeSkills = latestResume.parsed_data.extracted_skills || [];
+      resumeText = latestResume.raw_text || '';
+    } else {
+      const profile = getLocalData('profile', {});
+      resumeSkills = profile.skills || ['Python', 'JavaScript', 'SQL'];
+    }
+
+    // 2. Get Job Skills
+    let jobSkills = [];
+    let jobText = data.job_text || '';
+    if (data.job_id) {
+      const jobs = getLocalData('jobs', []);
+      const matchedJob = jobs.find(j => j.id === data.job_id);
+      if (matchedJob) {
+        jobSkills = matchedJob.extracted_skills || [];
+        jobText = matchedJob.raw_text || '';
+      }
+    }
+    if (jobSkills.length === 0 && jobText) {
+      const textLower = jobText.toLowerCase();
+      SKILL_TAXONOMY.forEach(s => {
+        const reg = new RegExp(`\\b${s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (reg.test(textLower)) {
+          jobSkills.push(s.length > 3 ? s.charAt(0).toUpperCase() + s.slice(1) : s.toUpperCase());
+        }
+      });
+      jobSkills = Array.from(new Set(jobSkills));
+    }
+    if (jobSkills.length === 0) {
+      jobSkills = ['Python', 'React', 'SQL', 'Docker', 'Git'];
+    }
+
+    // 3. Compare
+    const resumeSkillsLower = new Set(resumeSkills.map(s => s.toLowerCase()));
+    const matching = jobSkills.filter(s => resumeSkillsLower.has(s.toLowerCase()));
+    const missing = jobSkills.filter(s => !resumeSkillsLower.has(s.toLowerCase()));
+
+    const matchRatio = jobSkills.length > 0 ? (matching.length / jobSkills.length) : 0.5;
+    let matchPct = Math.round(matchRatio * 100 * 10) / 10;
+    matchPct = Math.min(98.0, Math.max(20.0, matchPct));
+
+    const recommendations = [];
+    if (missing.length > 0) {
+      recommendations.push(`Add key missing technical skills to your resume: ${missing.slice(0, 4).join(', ')}.`);
+    }
+    if (matchPct < 70) {
+      recommendations.push('Tailor your project descriptions to mirror the terminology found in the job requirements.');
+    }
+    recommendations.push('Quantify the business impact of your engineering projects with metrics.');
+
     return {
       data: {
-        match_percentage: 82.5,
-        explanation: 'Your resume matches 6 out of 7 core technical skills required for this role.',
-        matching_skills: ['Python', 'React', 'JavaScript', 'SQL', 'Git', 'REST API'],
-        missing_skills: ['Docker'],
-        ats_keyword_gaps: ['Docker', 'Kubernetes', 'CI/CD'],
-        recommendations: [
-          'Add Docker containerization experience to your projects section.',
-          'Quantify your backend optimizations with clear latency/throughput metrics.'
-        ]
+        match_percentage: matchPct,
+        explanation: `Your resume matches ${matching.length} out of ${jobSkills.length} core technical requirements for this position.`,
+        matching_skills: matching,
+        missing_skills: missing,
+        ats_keyword_gaps: missing.slice(0, 5),
+        recommendations
       }
     };
   }
@@ -277,20 +508,69 @@ export const getSkillGapApi = async () => {
   try {
     return await api.get('/skills/gap-analysis');
   } catch (err) {
+    const profile = getLocalData('profile', {});
+    const targetRole = profile.target_role || 'Software Development Engineer';
+
+    // Get user skills from profile + uploaded resume
+    const userSkillsSet = new Set((profile.skills || []).map(s => s.toLowerCase()));
+    const latestResume = getLocalData('latest_resume', null);
+    if (latestResume && latestResume.parsed_data && latestResume.parsed_data.extracted_skills) {
+      latestResume.parsed_data.extracted_skills.forEach(s => userSkillsSet.add(s.toLowerCase()));
+    }
+
+    const roleTemplates = {
+      'Software Development Engineer': {
+        'Programming & Languages': ['Python', 'Java', 'C++', 'JavaScript'],
+        'Backend & APIs': ['REST API', 'FastAPI', 'Node.js', 'Django'],
+        'Databases': ['SQL', 'PostgreSQL', 'MongoDB'],
+        'DevOps & Tools': ['Git', 'Docker', 'Linux', 'CI/CD']
+      },
+      'Frontend Engineer': {
+        'Core Web': ['HTML', 'CSS', 'JavaScript', 'TypeScript'],
+        'Frameworks & Libraries': ['React', 'Next.js', 'Tailwind CSS', 'Redux'],
+        'Testing & Tools': ['Git', 'Vite', 'Jest', 'Postman']
+      }
+    };
+
+    const categoriesConfig = roleTemplates[targetRole] || roleTemplates['Software Development Engineer'];
+    let totalReq = 0;
+    let totalMastered = 0;
+    const categories = [];
+    const priorityLearning = [];
+
+    Object.entries(categoriesConfig).forEach(([catName, skillsList]) => {
+      const mastered = [];
+      const missing = [];
+      skillsList.forEach(sk => {
+        totalReq++;
+        if (userSkillsSet.has(sk.toLowerCase())) {
+          mastered.push(sk);
+          totalMastered++;
+        } else {
+          missing.push(sk);
+          priorityLearning.push(sk);
+        }
+      });
+      const compRate = skillsList.length > 0 ? Math.round((mastered.length / skillsList.length) * 100) : 0;
+      categories.push({
+        category_name: catName,
+        mastered,
+        missing,
+        completion_rate: compRate
+      });
+    });
+
+    const overallReadiness = totalReq > 0 ? Math.round((totalMastered / totalReq) * 100) : 50;
+
     return {
       data: {
-        target_role: 'Software Development Engineer',
-        overall_readiness: 75.0,
-        total_required_skills: 16,
-        mastered_skills_count: 12,
-        missing_skills_count: 4,
-        categories: [
-          { category_name: 'Programming & Languages', mastered: ['Python', 'JavaScript', 'C++'], missing: ['Java'], completion_rate: 75.0 },
-          { category_name: 'Backend & APIs', mastered: ['REST API', 'FastAPI', 'Django'], missing: ['Node.js'], completion_rate: 75.0 },
-          { category_name: 'Databases', mastered: ['SQL', 'PostgreSQL'], missing: ['MongoDB'], completion_rate: 66.7 },
-          { category_name: 'DevOps & Tools', mastered: ['Git', 'Linux'], missing: ['Docker', 'CI/CD'], completion_rate: 50.0 }
-        ],
-        priority_learning_list: ['Docker', 'Java', 'MongoDB', 'CI/CD']
+        target_role: targetRole,
+        overall_readiness: overallReadiness,
+        total_required_skills: totalReq,
+        mastered_skills_count: totalMastered,
+        missing_skills_count: priorityLearning.length,
+        categories,
+        priority_learning_list: priorityLearning.slice(0, 6)
       }
     };
   }
@@ -370,7 +650,6 @@ export const toggleRoadmapTaskApi = async (taskId) => {
     }
     roadmap.completed_task_ids = Array.from(completed);
     
-    // Update task object statuses
     let totalTasks = 0;
     roadmap.phases.forEach(p => {
       p.tasks.forEach(t => {
@@ -388,7 +667,11 @@ export const getApplicationsApi = async () => {
   try {
     return await api.get('/applications/');
   } catch (err) {
-    return { data: getLocalData('applications', []) };
+    return { data: getLocalData('applications', [
+      { id: 1, company: 'Google', role: 'Software Engineer', status: 'Interview', applied_date: '2026-09-10', interview_date: '2026-10-05', job_url: 'https://careers.google.com', notes: 'Round 1 DSA scheduled' },
+      { id: 2, company: 'Microsoft', role: 'Frontend Engineer', status: 'Assessment', applied_date: '2026-09-12', job_url: 'https://careers.microsoft.com', notes: 'Completed online assessment' },
+      { id: 3, company: 'Amazon', role: 'SDE-1', status: 'Applied', applied_date: '2026-09-15', job_url: 'https://amazon.jobs', notes: 'Referred by college alumni' }
+    ]) };
   }
 };
 
@@ -563,11 +846,14 @@ export const getDashboardAnalyticsApi = async () => {
       else counts.Applied++;
     });
 
+    const latestResume = getLocalData('latest_resume', null);
+    const atsScore = latestResume?.parsed_data?.scores?.overall || latestResume?.score || 78.5;
+
     return {
       data: {
-        ats_score: 84.5,
-        total_applications: apps.length || 6,
-        application_status_counts: apps.length > 0 ? counts : { Applied: 3, Assessment: 2, Interview: 1, Offer: 1, Rejected: 0, Wishlist: 1 },
+        ats_score: atsScore,
+        total_applications: apps.length || 3,
+        application_status_counts: apps.length > 0 ? counts : { Applied: 1, Assessment: 1, Interview: 1, Offer: 0, Rejected: 0, Wishlist: 0 },
         roadmap_progress: 35.0,
         interview_average_score: 82.0,
         skill_breakdown: [
@@ -579,7 +865,7 @@ export const getDashboardAnalyticsApi = async () => {
           { subject: 'Soft Skills & Behavioral', A: 75, fullMark: 100 }
         ],
         recent_activities: [
-          { id: 1, type: 'Resume Analyzed', detail: 'ATS score: 84.5/100', time: 'Just now' },
+          { id: 1, type: 'Resume Analyzed', detail: `ATS score: ${atsScore}/100`, time: 'Just now' },
           { id: 2, type: 'Application Tracked', detail: 'Applied to Google - Software Engineer', time: '1 day ago' },
           { id: 3, type: 'Mock Interview', detail: 'Scored 88% in Technical Q&A session', time: '2 days ago' }
         ]
@@ -592,9 +878,12 @@ export const getProjectRecommendationsApi = async () => {
   try {
     return await api.get('/projects/recommendations');
   } catch (err) {
+    const profile = getLocalData('profile', {});
+    const targetRole = profile.target_role || 'Software Development Engineer';
+
     return {
       data: {
-        target_role: 'Software Development Engineer',
+        target_role: targetRole,
         recommendations: [
           {
             title: 'Cloud-Native E-Commerce Platform with Microservices',
